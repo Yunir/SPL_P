@@ -1,3 +1,4 @@
+#include "espconn.h"
 #include <osapi.h>
 #include "driver/uart.h"
 #include "user_interface.h"
@@ -60,6 +61,86 @@ static char macaddr[6];
 static ETSTimer WiFiLinker;
 static tConnState connState = WIFI_CONNECTING;
 static void wifi_check_ip(void *arg);
+struct espconn Conn;
+esp_tcp ConnTcp;
+static unsigned char tcpReconCount;
+
+static void ICACHE_FLASH_ATTR platform_reconnect(struct espconn *pespconn)
+{
+	wifi_check_ip(NULL);
+}
+
+static void ICACHE_FLASH_ATTR tcpclient_connect_cb(void *arg)
+{
+	struct espconn *pespconn = arg;
+	tcpReconCount = 0;
+	char payload[128];
+	espconn_regist_sentcb(pespconn, tcpclient_sent_cb);
+	connState = TCP_CONNECTED;
+	os_sprintf(payload, MACSTR ",%s", MAC2STR(macaddr), "ESP8266");
+	sint8 espsent_status = espconn_sent(pespconn, payload, strlen(payload));
+	if(espsent_status == ESPCONN_OK) {
+		connState = TCP_SENT_DATA;
+	} else {
+		connState = TCP_SENDING_DATA_ERROR;
+	}
+}
+
+static void ICACHE_FLASH_ATTR tcpclient_recon_cb(void *arg, sint8 err)
+{
+	struct espconn *pespconn = arg;
+	connState = TCP_DISCONNECTED;
+    if (++tcpReconCount >= 5)
+    {
+		connState = TCP_CONNECTING_ERROR;
+		tcpReconCount = 0;
+		os_timer_disarm(&WiFiLinker);
+		os_timer_setfn(&WiFiLinker, (os_timer_func_t *)platform_reconnect, pespconn);
+		os_timer_arm(&WiFiLinker, 10000, 0);
+    }
+    else
+    {
+		os_timer_disarm(&WiFiLinker);
+		os_timer_setfn(&WiFiLinker, (os_timer_func_t *)platform_reconnect, pespconn);
+		os_timer_arm(&WiFiLinker, 2000, 0);
+	}
+}
+
+static void ICACHE_FLASH_ATTR tcpclient_discon_cb(void *arg)
+{
+	struct espconn *pespconn = arg;
+	connState = TCP_DISCONNECTED;
+	if (pespconn == NULL)
+	{
+		return;
+	}
+	os_timer_disarm(&WiFiLinker);
+	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)platform_reconnect, pespconn);
+	os_timer_arm(&WiFiLinker, 2000, 0);
+}
+
+static void ICACHE_FLASH_ATTR send_data()
+{
+	os_timer_disarm(&WiFiLinker);
+	char info[150];
+	char tcpserverip[15];
+	Conn.proto.tcp = &ConnTcp;
+	Conn.type = ESPCONN_TCP;
+	Conn.state = ESPCONN_NONE;
+	os_sprintf(tcpserverip, "%s", TCPSERVERIP);
+	uint32_t ip = ipaddr_addr(tcpserverip);
+	os_memcpy(Conn.proto.tcp->remote_ip, &ip, 4);
+	Conn.proto.tcp->local_port = espconn_port();
+	Conn.proto.tcp->remote_port = TCPSERVERPORT;
+	espconn_regist_connectcb(&Conn, tcpclient_connect_cb);
+	espconn_regist_reconcb(&Conn, tcpclient_recon_cb);
+	espconn_regist_disconcb(&Conn, tcpclient_discon_cb);
+	sint8 espcon_status = espconn_connect(&Conn);
+	if(espcon_status != ESPCONN_OK) {
+		os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
+		os_timer_arm(&WiFiLinker, 1000, 0);
+	}
+}
 
 static void ICACHE_FLASH_ATTR wifi_check_ip(void *arg)
 {
@@ -72,7 +153,7 @@ static void ICACHE_FLASH_ATTR wifi_check_ip(void *arg)
 			if(ipConfig.ip.addr != 0) {
 				connState = WIFI_CONNECTED;
 				connState = TCP_CONNECTING;
-
+				send_data();
 				return;
 			}
 			break;
