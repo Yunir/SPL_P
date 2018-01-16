@@ -44,9 +44,53 @@ uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
     return rf_cal_sec;
 }
 
+typedef enum {
+	WIFI_CONNECTING,
+	WIFI_CONNECTING_ERROR,
+	WIFI_CONNECTED,
+	TCP_DISCONNECTED,
+	TCP_CONNECTING,
+	TCP_CONNECTING_ERROR,
+	TCP_CONNECTED,
+	TCP_SENDING_DATA_ERROR,
+	TCP_SENT_DATA
+} tConnState;
+
 static char macaddr[6];
 static ETSTimer WiFiLinker;
+static tConnState connState = WIFI_CONNECTING;
 static void wifi_check_ip(void *arg);
+
+static void ICACHE_FLASH_ATTR wifi_check_ip(void *arg)
+{
+	struct ip_info ipConfig;
+	os_timer_disarm(&WiFiLinker);
+	switch(wifi_station_get_connect_status())
+	{
+		case STATION_GOT_IP:
+			wifi_get_ip_info(STATION_IF, &ipConfig);
+			if(ipConfig.ip.addr != 0) {
+				connState = WIFI_CONNECTED;
+				connState = TCP_CONNECTING;
+
+				return;
+			}
+			break;
+		case STATION_WRONG_PASSWORD:
+			connState = WIFI_CONNECTING_ERROR;
+			break;
+		case STATION_NO_AP_FOUND:
+			connState = WIFI_CONNECTING_ERROR;
+			break;
+		case STATION_CONNECT_FAIL:
+			connState = WIFI_CONNECTING_ERROR;
+			break;
+		default:
+			connState = WIFI_CONNECTING;
+	}
+	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
+	os_timer_arm(&WiFiLinker, 1000, 0);
+}
 
 void user_init(void)
 {
