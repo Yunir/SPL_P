@@ -65,6 +65,12 @@ struct espconn Conn;
 esp_tcp ConnTcp;
 static unsigned char tcpReconCount;
 
+static void ICACHE_FLASH_ATTR tcpclient_sent_cb(void *arg)
+{
+	struct espconn *pespconn = arg;
+	espconn_disconnect(pespconn);
+}
+
 static void ICACHE_FLASH_ATTR platform_reconnect(struct espconn *pespconn)
 {
 	wifi_check_ip(NULL);
