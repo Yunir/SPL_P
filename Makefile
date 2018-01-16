@@ -26,12 +26,6 @@ ESPPORT ?= COM3
 # Baud rate
 ESPBAUD ?= 256000
 
-# Boot mode
-BOOT ?= none
-
-# type of firmware generating
-APP ?= 0
-
 # Flash Frequency for ESP8266
 SPI_SPEED ?= 40
 
@@ -47,25 +41,8 @@ MODULES	= driver user
 # necessary libraries
 LIBS = c gcc hal phy pp net80211 lwip wpa main crypto
 
-ifeq ($(BOOT), new)
-    boot = new
-else
-    ifeq ($(BOOT), old)
-        boot = old
-    else
-        boot = none
-    endif
-endif
-
-ifeq ($(APP), 1)
-    app = 1
-else
-    ifeq ($(APP), 2)
-        app = 2
-    else
-        app = 0
-    endif
-endif
+boot = none
+app = 0
 
 ifeq ($(SPI_SPEED), 26)
     freqdiv = 1
@@ -122,56 +99,35 @@ else
       size_map = 3
       flash = 2048
       flashimageoptions += -fs 2MB
-      ifeq ($(app), 2)
-        addr = 0x81000
-      endif
     else
       ifeq ($(SPI_SIZE_MAP), 4)
 	size_map = 4
 	flash = 4096
 	flashimageoptions += -fs 4MB
-        ifeq ($(app), 2)
-          addr = 0x81000
-        endif
       else
         ifeq ($(SPI_SIZE_MAP), 5)
           size_map = 5
           flash = 2048
           flashimageoptions += -fs 2MB-c1
-          ifeq ($(app), 2)
-            addr = 0x101000
-          endif
         else
           ifeq ($(SPI_SIZE_MAP), 6)
             size_map = 6
             flash = 4096
             flashimageoptions += -fs 4MB-c1
-            ifeq ($(app), 2)
-              addr = 0x101000
-            endif
           else
             ifeq ($(SPI_SIZE_MAP), 8)
               size_map = 8
               flash = 8192
               flashimageoptions += -fs 8MB
-              ifeq ($(app), 2)
-                addr = 0x101000
-              endif
             else
               ifeq ($(SPI_SIZE_MAP), 9)
                 size_map = 9
                 flash = 16384
                 flashimageoptions += -fs 16MB
-                ifeq ($(app), 2)
-                  addr = 0x101000
-                endif
               else
                 size_map = 0
                 flash = 512
                 flashimageoptions += -fs 512KB
-                ifeq ($(app), 2)
-                addr = 0x41000
-                endif
               endif
             endif
           endif
@@ -193,38 +149,6 @@ LDFLAGS		= -nostdlib -Wl,--no-check-sections -u call_user_start -Wl,-static
 # linker script used for the above linkier step
 LD_SCRIPT	= eagle.app.v6.ld
 
-ifneq ($(boot), none)
-ifneq ($(app),0)
-    ifneq ($(findstring $(size_map),  6  8  9),)
-      LD_SCRIPT = eagle.app.v6.$(boot).2048.ld
-    else
-      ifeq ($(size_map), 5)
-        LD_SCRIPT = eagle.app.v6.$(boot).2048.ld
-      else
-        ifeq ($(size_map), 4)
-          LD_SCRIPT = eagle.app.v6.$(boot).1024.app$(app).ld
-        else
-          ifeq ($(size_map), 3)
-            LD_SCRIPT = eagle.app.v6.$(boot).1024.app$(app).ld
-          else
-            ifeq ($(size_map), 2)
-              LD_SCRIPT = eagle.app.v6.$(boot).1024.app$(app).ld
-            else
-              ifeq ($(size_map), 0)
-                LD_SCRIPT = eagle.app.v6.$(boot).512.app$(app).ld
-              endif
-            endif
-	      endif
-	    endif
-	  endif
-	endif
-	BIN_NAME = user$(app).$(flash).$(boot).$(size_map)
-	CFLAGS += -DAT_UPGRADE_SUPPORT
-endif
-else
-    app = 0
-endif
-
 # various paths from the SDK used in this project
 SDK_LIBDIR	= lib
 SDK_LDDIR	= ld
@@ -235,8 +159,8 @@ CC		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-gcc
 CXX		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-g++
 AR		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-ar
 LD		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-gcc
-OBJCOPY		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-objcopy
-OBJDUMP		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-objdump
+OBJCOPY	:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-objcopy
+OBJDUMP	:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-objdump
 
 SRC_DIR		:= $(MODULES)
 BUILD_DIR	:= $(addprefix $(BUILD_BASE)/,$(MODULES))
@@ -244,17 +168,17 @@ BUILD_DIR	:= $(addprefix $(BUILD_BASE)/,$(MODULES))
 SDK_LIBDIR	:= $(addprefix $(SDK_BASE)/,$(SDK_LIBDIR))
 SDK_INCDIR	:= $(addprefix -I$(SDK_BASE)/,$(SDK_INCDIR))
 
-SRC		:= $(foreach sdir,$(SRC_DIR),$(wildcard $(sdir)/*.c*))
+SRC			:= $(foreach sdir,$(SRC_DIR),$(wildcard $(sdir)/*.c*))
 C_OBJ		:= $(patsubst %.c,%.o,$(SRC))
 CXX_OBJ		:= $(patsubst %.cpp,%.o,$(C_OBJ))
-OBJ		:= $(patsubst %.o,$(BUILD_BASE)/%.o,$(CXX_OBJ))
+OBJ			:= $(patsubst %.o,$(BUILD_BASE)/%.o,$(CXX_OBJ))
 LIBS		:= $(addprefix -l,$(LIBS))
 APP_AR		:= $(addprefix $(BUILD_BASE)/,$(TARGET)_app.a)
 TARGET_OUT	:= $(addprefix $(BUILD_BASE)/,$(TARGET).out)
 
 LD_SCRIPT	:= $(addprefix -T$(SDK_BASE)/$(SDK_LDDIR)/,$(LD_SCRIPT))
 
-INCDIR		:= $(addprefix -I,$(SRC_DIR))
+INCDIR			:= $(addprefix -I,$(SRC_DIR))
 EXTRA_INCDIR	:= $(addprefix -I,$(EXTRA_INCDIR))
 MODULE_INCDIR	:= $(addsuffix /include,$(INCDIR))
 
@@ -339,39 +263,8 @@ $(FW_BASE):
 	$(Q) mkdir -p $@
 	$(Q) mkdir -p $@/upgrade
 
-flashboot:
-ifeq ($(app), 0)
-	$(vecho) "No boot needed."
-else
-    ifneq ($(boot), new)
-	$(vecho) "Flash boot_v1.2 and +"
-	$(ESPTOOL) -p $(ESPPORT) -b $(ESPBAUD) write_flash $(flashimageoptions) 0x00000 $(SDK_BASE)/bin/boot_v1.2.bin
-    else
-    	ifneq ($(findstring $(size_map),  6  8  9),)
-		$(vecho) "Flash boot_v1.7 and +"
-		$(ESPTOOL) -p $(ESPPORT) -b $(ESPBAUD) write_flash $(flashimageoptions) 0x00000 $(SDK_BASE)/bin/boot_v1.7.bin
-        else
-            ifeq ($(size_map), 5)
-		$(vecho) "Flash boot_v1.5 and +"
-		$(ESPTOOL) -p $(ESPPORT) -b $(ESPBAUD) write_flash $(flashimageoptions) 0x00000 $(SDK_BASE)/bin/boot_v1.6.bin
-            else
-		$(vecho) "Flash boot_v1.2 and +"
-		$(ESPTOOL) -p $(ESPPORT) -b $(ESPBAUD) write_flash $(flashimageoptions) 0x00000 $(SDK_BASE)/bin/boot_v1.2.bin
-            endif
-        endif
-    endif
-endif
-
 flash: all
-ifeq ($(app), 0)
 	$(ESPTOOL) -p $(ESPPORT) -b $(ESPBAUD) write_flash $(flashimageoptions) 0x00000 $(FW_BASE)/eagle.flash.bin 0x10000 $(FW_BASE)/eagle.irom0text.bin
-else
-ifeq ($(boot), none)
-	$(ESPTOOL) -p $(ESPPORT) -b $(ESPBAUD) write_flash $(flashimageoptions) 0x00000 $(FW_BASE)/eagle.flash.bin 0x10000 $(FW_BASE)/eagle.irom0text.bin
-else
-	$(ESPTOOL) -p $(ESPPORT) -b $(ESPBAUD) write_flash $(flashimageoptions) $(addr) $(FW_BASE)/upgrade/$(BIN_NAME).bin
-endif
-endif
 
 # FLASH SIZE
 flashinit:
