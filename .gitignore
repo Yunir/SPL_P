@@ -1,3 +1,5 @@
 .settings/*
 .cproject
 .project
+firmware/*
+build/*
