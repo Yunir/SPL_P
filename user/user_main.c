@@ -1,3 +1,5 @@
+#include "ets_sys.h"
+#include "ip_addr.h"
 #include "espconn.h"
 #include <osapi.h>
 #include "driver/uart.h"
@@ -179,27 +181,38 @@ static void ICACHE_FLASH_ATTR wifi_check_ip(void *arg)
 	os_timer_arm(&WiFiLinker, 1000, 0);
 }
 
+void setup_wifi_st_mode(void)
+{
+	wifi_set_opmode(STATION_MODE);
+	struct station_config stconfig;
+	wifi_station_disconnect();
+	wifi_station_dhcpc_stop();
+	if(wifi_station_get_config(&stconfig))
+	{
+		os_memset(stconfig.ssid, 0, sizeof(stconfig.ssid));
+		os_memset(stconfig.password, 0, sizeof(stconfig.password));
+		os_sprintf(stconfig.ssid, "%s", WIFI_CLIENTSSID);
+		os_sprintf(stconfig.password, "%s", WIFI_CLIENTPASSWORD);
+	}
+	wifi_station_connect();
+	wifi_station_dhcpc_start();
+	wifi_station_set_auto_connect(1);
+}
+
 void user_init(void)
 {
 	uart_init(BIT_RATE_115200, BIT_RATE_115200);
-	os_delay_us(100);
-	//structure with STA configuration information
-	struct station_config stationConfig;
-	char info[150];
-	if(wifi_get_opmode() != STATION_MODE)
-	{
-			wifi_set_opmode(STATION_MODE);
-	}
-	if(wifi_get_opmode() == STATION_MODE)
-	{
-		wifi_station_get_config(&stationConfig);
-		os_memset(stationConfig.ssid, 0, sizeof(stationConfig.ssid));
-		os_memset(stationConfig.password, 0, sizeof(stationConfig.password));
-		os_sprintf(stationConfig.ssid, "%s", WIFI_CLIENTSSID);
-		os_sprintf(stationConfig.password, "%s", WIFI_CLIENTPASSWORD);
-		wifi_station_set_config(&stationConfig);
-		wifi_get_macaddr(SOFTAP_IF, macaddr);
-	}
+	os_delay_us(1000);
+
+	setup_wifi_st_mode();
+	wifi_get_macaddr(STATION_IF, macaddr);
+
+	if(wifi_get_phy_mode() != PHY_MODE_11N)
+		wifi_set_phy_mode(PHY_MODE_11N);
+	if(wifi_station_get_auto_connect() == 0)
+		wifi_station_set_auto_connect(1);
+
+
 	os_timer_disarm(&WiFiLinker);
 	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
 	os_timer_arm(&WiFiLinker, 1000, 0);
