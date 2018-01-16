@@ -1,6 +1,7 @@
 #include <osapi.h>
 #include "driver/uart.h"
 #include "user_interface.h"
+#include "user_config.h"
 
 // magic numbers
 #define DELAY 5000
@@ -43,17 +44,32 @@ uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
     return rf_cal_sec;
 }
 
-static os_timer_t hello_timer;
-
-static void ICACHE_FLASH_ATTR hello_func(void *arg)
-{
-	ets_uart_printf("Hello World!\r\n");
-}
+static char macaddr[6];
+static ETSTimer WiFiLinker;
+static void wifi_check_ip(void *arg);
 
 void user_init(void)
 {
 	uart_init(BIT_RATE_115200, BIT_RATE_115200);
-	os_timer_disarm(&hello_timer);
-	os_timer_setfn(&hello_timer, (os_timer_func_t *)hello_func, (void *)0);
-	os_timer_arm(&hello_timer, DELAY, 1);
+	os_delay_us(100);
+	//structure with STA configuration information
+	struct station_config stationConfig;
+	char info[150];
+	if(wifi_get_opmode() != STATION_MODE)
+	{
+			wifi_set_opmode(STATION_MODE);
+	}
+	if(wifi_get_opmode() == STATION_MODE)
+	{
+		wifi_station_get_config(&stationConfig);
+		os_memset(stationConfig.ssid, 0, sizeof(stationConfig.ssid));
+		os_memset(stationConfig.password, 0, sizeof(stationConfig.password));
+		os_sprintf(stationConfig.ssid, "%s", WIFI_CLIENTSSID);
+		os_sprintf(stationConfig.password, "%s", WIFI_CLIENTPASSWORD);
+		wifi_station_set_config(&stationConfig);
+		wifi_get_macaddr(SOFTAP_IF, macaddr);
+	}
+	os_timer_disarm(&WiFiLinker);
+	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
+	os_timer_arm(&WiFiLinker, 1000, 0);
 }
