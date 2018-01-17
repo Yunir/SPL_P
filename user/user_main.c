@@ -178,10 +178,10 @@ static void ICACHE_FLASH_ATTR wifi_check_ip(void *arg)
 			connState = WIFI_CONNECTING;
 	}
 	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
-	os_timer_arm(&WiFiLinker, 1000, 0);
+	os_timer_arm(&WiFiLinker, 2000, 0);
 }
 
-void setup_wifi_st_mode(void)
+void connect_to_wifi(void)
 {
 	wifi_set_opmode(STATION_MODE);
 	struct station_config stconfig;
@@ -204,7 +204,7 @@ void user_init(void)
 	uart_init(BIT_RATE_115200, BIT_RATE_115200);
 	os_delay_us(1000);
 
-	setup_wifi_st_mode();
+	connect_to_wifi();
 	wifi_get_macaddr(STATION_IF, macaddr);
 
 	if(wifi_get_phy_mode() != PHY_MODE_11N)
