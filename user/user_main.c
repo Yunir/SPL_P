@@ -10,6 +10,63 @@
 // magic numbers
 #define DELAY 2000 /* milliseconds */
 
+uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
+{
+    enum flash_size_map size_map = system_get_flash_size_map();
+    uint32 rf_cal_sec = 0;
+
+    switch (size_map) {
+        case FLASH_SIZE_4M_MAP_256_256:
+            rf_cal_sec = 128 - 5;
+            break;
+
+        case FLASH_SIZE_8M_MAP_512_512:
+            rf_cal_sec = 256 - 5;
+            break;
+
+        case FLASH_SIZE_16M_MAP_512_512:
+        case FLASH_SIZE_16M_MAP_1024_1024:
+            rf_cal_sec = 512 - 5;
+            break;
+
+        case FLASH_SIZE_32M_MAP_512_512:
+        case FLASH_SIZE_32M_MAP_1024_1024:
+            rf_cal_sec = 1024 - 5;
+            break;
+
+        case FLASH_SIZE_64M_MAP_1024_1024:
+            rf_cal_sec = 2048 - 5;
+            break;
+        case FLASH_SIZE_128M_MAP_1024_1024:
+            rf_cal_sec = 4096 - 5;
+            break;
+        default:
+            rf_cal_sec = 0;
+            break;
+    }
+
+    return rf_cal_sec;
+}
+
+typedef enum {
+	WIFI_CONNECTING,
+	WIFI_CONNECTING_ERROR,
+	WIFI_CONNECTED,
+	TCP_DISCONNECTED,
+	TCP_CONNECTING,
+	TCP_CONNECTING_ERROR,
+	TCP_CONNECTED,
+	TCP_SENDING_DATA_ERROR,
+	TCP_SENT_DATA
+} tConnState;
+
+static char macaddr[6];
+static ETSTimer WiFiLinker;
+static tConnState connState = WIFI_CONNECTING;
+static void wifi_check_ip(void *arg);
+struct espconn Conn;
+esp_tcp ConnTcp;
+static unsigned char tcpReconCount;
 extern int ets_uart_printf(const char *fmt, ...);
 int (*console_printf)(const char *fmt, ...) = ets_uart_printf;
 char temperature[128];
@@ -81,68 +138,22 @@ int ICACHE_FLASH_ATTR ds18b20()
 	return r;
 }
 
-uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
-{
-    enum flash_size_map size_map = system_get_flash_size_map();
-    uint32 rf_cal_sec = 0;
+static void ICACHE_FLASH_ATTR send_temperature(void *arg) {
+		ds18b20();
+		console_printf(temperature);
+		sint8 espsent_status = espconn_sent(&Conn, temperature, strlen(temperature));
+		if(espsent_status == ESPCONN_OK) {
+			connState = TCP_SENT_DATA;
+		} else {
+			connState = TCP_SENDING_DATA_ERROR;
+		}
 
-    switch (size_map) {
-        case FLASH_SIZE_4M_MAP_256_256:
-            rf_cal_sec = 128 - 5;
-            break;
-
-        case FLASH_SIZE_8M_MAP_512_512:
-            rf_cal_sec = 256 - 5;
-            break;
-
-        case FLASH_SIZE_16M_MAP_512_512:
-        case FLASH_SIZE_16M_MAP_1024_1024:
-            rf_cal_sec = 512 - 5;
-            break;
-
-        case FLASH_SIZE_32M_MAP_512_512:
-        case FLASH_SIZE_32M_MAP_1024_1024:
-            rf_cal_sec = 1024 - 5;
-            break;
-
-        case FLASH_SIZE_64M_MAP_1024_1024:
-            rf_cal_sec = 2048 - 5;
-            break;
-        case FLASH_SIZE_128M_MAP_1024_1024:
-            rf_cal_sec = 4096 - 5;
-            break;
-        default:
-            rf_cal_sec = 0;
-            break;
-    }
-
-    return rf_cal_sec;
 }
-
-typedef enum {
-	WIFI_CONNECTING,
-	WIFI_CONNECTING_ERROR,
-	WIFI_CONNECTED,
-	TCP_DISCONNECTED,
-	TCP_CONNECTING,
-	TCP_CONNECTING_ERROR,
-	TCP_CONNECTED,
-	TCP_SENDING_DATA_ERROR,
-	TCP_SENT_DATA
-} tConnState;
-
-static char macaddr[6];
-static ETSTimer WiFiLinker;
-static tConnState connState = WIFI_CONNECTING;
-static void wifi_check_ip(void *arg);
-struct espconn Conn;
-esp_tcp ConnTcp;
-static unsigned char tcpReconCount;
 
 static void ICACHE_FLASH_ATTR tcpclient_sent_cb(void *arg)
 {
 	struct espconn *pespconn = arg;
-	espconn_disconnect(pespconn);
+	//espconn_disconnect(pespconn);
 }
 
 static void ICACHE_FLASH_ATTR platform_reconnect(struct espconn *pespconn)
@@ -157,7 +168,7 @@ static void ICACHE_FLASH_ATTR tcpclient_connect_cb(void *arg)
 	char payload[128];
 	espconn_regist_sentcb(pespconn, tcpclient_sent_cb);
 	connState = TCP_CONNECTED;
-	os_sprintf(payload, MACSTR ",%s", MAC2STR(macaddr), "ESP8266");
+	os_sprintf(payload, MACSTR ",%s", MAC2STR(macaddr), " - ESP8266\r\n");
 	sint8 espsent_status = espconn_sent(pespconn, payload, strlen(payload));
 	if(espsent_status == ESPCONN_OK) {
 		connState = TCP_SENT_DATA;
@@ -220,6 +231,8 @@ static void ICACHE_FLASH_ATTR send_data()
 		os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
 		os_timer_arm(&WiFiLinker, 1000, 0);
 	}
+	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)send_temperature, NULL);
+	os_timer_arm(&WiFiLinker, DELAY, 1);
 }
 
 static void ICACHE_FLASH_ATTR wifi_check_ip(void *arg)
