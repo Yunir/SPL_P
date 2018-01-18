@@ -14,26 +14,21 @@ uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
 {
     enum flash_size_map size_map = system_get_flash_size_map();
     uint32 rf_cal_sec = 0;
-
     switch (size_map) {
         case FLASH_SIZE_4M_MAP_256_256:
             rf_cal_sec = 128 - 5;
             break;
-
         case FLASH_SIZE_8M_MAP_512_512:
             rf_cal_sec = 256 - 5;
             break;
-
         case FLASH_SIZE_16M_MAP_512_512:
         case FLASH_SIZE_16M_MAP_1024_1024:
             rf_cal_sec = 512 - 5;
             break;
-
         case FLASH_SIZE_32M_MAP_512_512:
         case FLASH_SIZE_32M_MAP_1024_1024:
             rf_cal_sec = 1024 - 5;
             break;
-
         case FLASH_SIZE_64M_MAP_1024_1024:
             rf_cal_sec = 2048 - 5;
             break;
@@ -44,7 +39,6 @@ uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
             rf_cal_sec = 0;
             break;
     }
-
     return rf_cal_sec;
 }
 
@@ -75,26 +69,21 @@ int ICACHE_FLASH_ATTR ds18b20()
 {
 	int r, i;
 	uint8_t addr[8], data[12];
-
 	ds_init();
-
 	r = ds_search(addr);
 	if(r)
 	{
 		console_printf("Found Device @ %02x %02x %02x %02x %02x %02x %02x %02x\r\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7]);
 		if(crc8(addr, 7) != addr[7])
 			console_printf( "CRC mismatch, crc=%xd, addr[7]=%xd\r\n", crc8(addr, 7), addr[7]);
-
 		switch(addr[0])
 		{
 		case 0x10:
 			console_printf("Device is DS18S20 family\r\n");
 			break;
-
 		case 0x28:
 			console_printf("Device is DS18B20 family\r\n");
 			break;
-
 		default:
 			console_printf("Device is unknown family\r\n");
 			return 1;
@@ -106,23 +95,19 @@ int ICACHE_FLASH_ATTR ds18b20()
 	}
 	reset();
 	select(addr);
-
 	write(DS1820_CONVERT_T, 1);
 
 	os_delay_us(65000);
-
 	console_printf("Scratchpad: ");
 	reset();
 	select(addr);
 	write(DS1820_READ_SCRATCHPAD, 0);
-
 	for(i = 0; i < 9; i++)
 	{
 		data[i] = read();
 		console_printf("%2x ", data[i]);
 	}
 	console_printf("\r\n");
-
 	int HighByte, LowByte, TReading, SignBit, Tc_100, Whole, Fract;
 	LowByte = data[0];
 	HighByte = data[1];
@@ -147,7 +132,6 @@ static void ICACHE_FLASH_ATTR send_temperature(void *arg) {
 		} else {
 			connState = TCP_SENDING_DATA_ERROR;
 		}
-
 }
 
 static void ICACHE_FLASH_ATTR tcpclient_sent_cb(void *arg)
@@ -287,7 +271,7 @@ void connect_to_wifi(void)
 void user_init(void)
 {
 	uart_init(BIT_RATE_115200, BIT_RATE_115200);
-	os_delay_us(1000);
+	os_delay_us(DELAY);
 
 	connect_to_wifi();
 	wifi_get_macaddr(STATION_IF, macaddr);
@@ -296,7 +280,6 @@ void user_init(void)
 		wifi_set_phy_mode(PHY_MODE_11N);
 	if(wifi_station_get_auto_connect() == 0)
 		wifi_station_set_auto_connect(1);
-
 
 	os_timer_disarm(&WiFiLinker);
 	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
