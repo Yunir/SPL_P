@@ -5,9 +5,81 @@
 #include "driver/uart.h"
 #include "user_interface.h"
 #include "user_config.h"
+#include "driver/ds18b20.h"
 
 // magic numbers
-#define DELAY 5000
+#define DELAY 2000 /* milliseconds */
+
+extern int ets_uart_printf(const char *fmt, ...);
+int (*console_printf)(const char *fmt, ...) = ets_uart_printf;
+char temperature[128];
+
+int ICACHE_FLASH_ATTR ds18b20()
+{
+	int r, i;
+	uint8_t addr[8], data[12];
+
+	ds_init();
+
+	r = ds_search(addr);
+	if(r)
+	{
+		console_printf("Found Device @ %02x %02x %02x %02x %02x %02x %02x %02x\r\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7]);
+		if(crc8(addr, 7) != addr[7])
+			console_printf( "CRC mismatch, crc=%xd, addr[7]=%xd\r\n", crc8(addr, 7), addr[7]);
+
+		switch(addr[0])
+		{
+		case 0x10:
+			console_printf("Device is DS18S20 family\r\n");
+			break;
+
+		case 0x28:
+			console_printf("Device is DS18B20 family\r\n");
+			break;
+
+		default:
+			console_printf("Device is unknown family\r\n");
+			return 1;
+		}
+	}
+	else {
+		console_printf("No DS18B20 detected\r\n");
+		return 1;
+	}
+	reset();
+	select(addr);
+
+	write(DS1820_CONVERT_T, 1);
+
+	os_delay_us(65000);
+
+	console_printf("Scratchpad: ");
+	reset();
+	select(addr);
+	write(DS1820_READ_SCRATCHPAD, 0);
+
+	for(i = 0; i < 9; i++)
+	{
+		data[i] = read();
+		console_printf("%2x ", data[i]);
+	}
+	console_printf("\r\n");
+
+	int HighByte, LowByte, TReading, SignBit, Tc_100, Whole, Fract;
+	LowByte = data[0];
+	HighByte = data[1];
+	TReading = (HighByte << 8) + LowByte;
+	SignBit = TReading & 0x8000;
+	if (SignBit)
+		TReading = (TReading ^ 0xffff) + 1;
+
+	Whole = TReading >> 4;
+	Fract = (TReading & 0xf) * 100 / 16;
+
+	os_sprintf(temperature, "Temperature: %c%d.%d Celsius\r\n", SignBit ? '-' : '+', Whole, Fract < 10 ? 0 : Fract);
+	return r;
+}
 
 uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
 {
