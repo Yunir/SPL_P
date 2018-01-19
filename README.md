@@ -1,7 +1,7 @@
 ## Wi-Fi module ESP8266 (ESP01 SoC) with ds18b20 temperature measurer firmware
 
 #### Main idea ( description )
-The project is created to connect WiFi module with temperature measurer and PC with TCP protocol in router ( AP ) sphere ( local area network ) and evaluate the temperature level in closed room to show when it would be nice to air
+The project is created to connect WiFi module with temperature measurer and PC with TCP protocol in router ( AP ) sphere ( local area network ) and evaluate the temperature level in closed room to show when it would be nice to air.
 
 #### Steps
 1. Trying to connect ESP01 to router ( AP ) with his SSID and password in Station mode

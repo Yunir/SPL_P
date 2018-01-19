@@ -8,7 +8,7 @@
 #include "driver/ds18b20.h"
 
 // magic numbers
-#define DELAY 2000 /* milliseconds */
+#define DELAY 2000
 
 uint32 ICACHE_FLASH_ATTR user_rf_cal_sector_set(void)
 {
@@ -55,7 +55,7 @@ typedef enum {
 } tConnState;
 
 static char macaddr[6];
-static ETSTimer WiFiLinker;
+static ETSTimer WifiConnectTimer;
 static tConnState connState = WIFI_CONNECTING;
 static void wifi_check_ip(void *arg);
 struct espconn Conn;
@@ -65,7 +65,7 @@ extern int ets_uart_printf(const char *fmt, ...);
 int (*console_printf)(const char *fmt, ...) = ets_uart_printf;
 char temperature[128];
 
-int ICACHE_FLASH_ATTR ds18b20()
+int ICACHE_FLASH_ATTR get_temperature()
 {
 	int r, i;
 	uint8_t addr[8], data[12];
@@ -124,7 +124,7 @@ int ICACHE_FLASH_ATTR ds18b20()
 }
 
 static void ICACHE_FLASH_ATTR send_temperature(void *arg) {
-		ds18b20();
+		get_temperature();
 		console_printf(temperature);
 		sint8 espsent_status = espconn_sent(&Conn, temperature, strlen(temperature));
 		if(espsent_status == ESPCONN_OK) {
@@ -152,7 +152,7 @@ static void ICACHE_FLASH_ATTR tcpclient_connect_cb(void *arg)
 	char payload[128];
 	espconn_regist_sentcb(pespconn, tcpclient_sent_cb);
 	connState = TCP_CONNECTED;
-	os_sprintf(payload, MACSTR ",%s", MAC2STR(macaddr), " - ESP8266\r\n");
+	os_sprintf(payload, MACSTR ",%s", MAC2STR(macaddr), " ESP8266\r\n");
 	sint8 espsent_status = espconn_sent(pespconn, payload, strlen(payload));
 	if(espsent_status == ESPCONN_OK) {
 		connState = TCP_SENT_DATA;
@@ -169,15 +169,15 @@ static void ICACHE_FLASH_ATTR tcpclient_recon_cb(void *arg, sint8 err)
     {
 		connState = TCP_CONNECTING_ERROR;
 		tcpReconCount = 0;
-		os_timer_disarm(&WiFiLinker);
-		os_timer_setfn(&WiFiLinker, (os_timer_func_t *)platform_reconnect, pespconn);
-		os_timer_arm(&WiFiLinker, 10000, 0);
+		os_timer_disarm(&WifiConnectTimer);
+		os_timer_setfn(&WifiConnectTimer, (os_timer_func_t *)platform_reconnect, pespconn);
+		os_timer_arm(&WifiConnectTimer, 10000, 0);
     }
     else
     {
-		os_timer_disarm(&WiFiLinker);
-		os_timer_setfn(&WiFiLinker, (os_timer_func_t *)platform_reconnect, pespconn);
-		os_timer_arm(&WiFiLinker, 2000, 0);
+		os_timer_disarm(&WifiConnectTimer);
+		os_timer_setfn(&WifiConnectTimer, (os_timer_func_t *)platform_reconnect, pespconn);
+		os_timer_arm(&WifiConnectTimer, 2000, 0);
 	}
 }
 
@@ -189,14 +189,14 @@ static void ICACHE_FLASH_ATTR tcpclient_discon_cb(void *arg)
 	{
 		return;
 	}
-	os_timer_disarm(&WiFiLinker);
-	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)platform_reconnect, pespconn);
-	os_timer_arm(&WiFiLinker, 2000, 0);
+	os_timer_disarm(&WifiConnectTimer);
+	os_timer_setfn(&WifiConnectTimer, (os_timer_func_t *)platform_reconnect, pespconn);
+	os_timer_arm(&WifiConnectTimer, 2000, 0);
 }
 
 static void ICACHE_FLASH_ATTR send_data()
 {
-	os_timer_disarm(&WiFiLinker);
+	os_timer_disarm(&WifiConnectTimer);
 	char info[150];
 	char tcpserverip[15];
 	Conn.proto.tcp = &ConnTcp;
@@ -212,17 +212,17 @@ static void ICACHE_FLASH_ATTR send_data()
 	espconn_regist_disconcb(&Conn, tcpclient_discon_cb);
 	sint8 espcon_status = espconn_connect(&Conn);
 	if(espcon_status != ESPCONN_OK) {
-		os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
-		os_timer_arm(&WiFiLinker, 1000, 0);
+		os_timer_setfn(&WifiConnectTimer, (os_timer_func_t *)wifi_check_ip, NULL);
+		os_timer_arm(&WifiConnectTimer, 1000, 0);
 	}
-	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)send_temperature, NULL);
-	os_timer_arm(&WiFiLinker, DELAY, 1);
+	os_timer_setfn(&WifiConnectTimer, (os_timer_func_t *)send_temperature, NULL);
+	os_timer_arm(&WifiConnectTimer, DELAY, 1);
 }
 
 static void ICACHE_FLASH_ATTR wifi_check_ip(void *arg)
 {
 	struct ip_info ipConfig;
-	os_timer_disarm(&WiFiLinker);
+	os_timer_disarm(&WifiConnectTimer);
 	switch(wifi_station_get_connect_status())
 	{
 		case STATION_GOT_IP:
@@ -246,8 +246,8 @@ static void ICACHE_FLASH_ATTR wifi_check_ip(void *arg)
 		default:
 			connState = WIFI_CONNECTING;
 	}
-	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
-	os_timer_arm(&WiFiLinker, 2000, 0);
+	os_timer_setfn(&WifiConnectTimer, (os_timer_func_t *)wifi_check_ip, NULL);
+	os_timer_arm(&WifiConnectTimer, 2000, 0);
 }
 
 void connect_to_wifi(void)
@@ -281,7 +281,7 @@ void user_init(void)
 	if(wifi_station_get_auto_connect() == 0)
 		wifi_station_set_auto_connect(1);
 
-	os_timer_disarm(&WiFiLinker);
-	os_timer_setfn(&WiFiLinker, (os_timer_func_t *)wifi_check_ip, NULL);
-	os_timer_arm(&WiFiLinker, 1000, 0);
+	os_timer_disarm(&WifiConnectTimer);
+	os_timer_setfn(&WifiConnectTimer, (os_timer_func_t *)wifi_check_ip, NULL);
+	os_timer_arm(&WifiConnectTimer, 1000, 0);
 }
